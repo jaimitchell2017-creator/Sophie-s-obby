@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>Sophie's Obby</title>
+<style>
+*{box-sizing:border-box}html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#07111f;font-family:Inter,Arial,sans-serif}
+body{color:white}
+#game{position:fixed;inset:0;display:block;background:linear-gradient(#63c7ff 0%,#bdeeff 48%,#eefbff 100%)}
+#hud{position:fixed;top:18px;left:18px;right:18px;display:flex;justify-content:space-between;align-items:flex-start;pointer-events:none}
+.card{background:rgba(8,18,35,.72);backdrop-filter:blur(12px);border:1px solid rgba(255,255,255,.2);border-radius:18px;padding:12px 16px;box-shadow:0 10px 30px #001a3344}
+.title{font-size:22px;font-weight:900;letter-spacing:.5px}.sub{font-size:12px;opacity:.72;margin-top:2px}
+.stats{display:flex;gap:9px}.pill{padding:10px 13px;font-weight:800;font-size:13px}
+#message{position:fixed;left:50%;bottom:24px;transform:translateX(-50%) translateY(20px);opacity:0;transition:.25s;background:rgba(8,18,35,.82);padding:13px 20px;border-radius:16px;font-weight:800;pointer-events:none}
+#message.show{opacity:1;transform:translateX(-50%) translateY(0)}
+#start{position:fixed;inset:0;display:grid;place-items:center;background:radial-gradient(circle at 50% 30%,#5dd5ff44,transparent 45%),rgba(3,8,18,.56);backdrop-filter:blur(5px);z-index:5}
+.panel{width:min(520px,calc(100% - 34px));padding:30px;border-radius:28px;text-align:center;background:rgba(7,17,32,.82);border:1px solid #ffffff2b;box-shadow:0 25px 70px #0008}
+.logo{font-size:clamp(42px,9vw,76px);font-weight:1000;line-height:.9;text-shadow:0 7px 0 #16476b,0 12px 30px #001a3388}
+.logo span{display:block;color:#fff}
+.pink{color:#ff76cf}.intro{opacity:.78;line-height:1.55;margin:18px 0 24px}
+button{border:0;border-radius:16px;padding:14px 24px;font-weight:900;font-size:16px;color:white;background:linear-gradient(135deg,#ff5fc7,#7d6cff);box-shadow:0 8px 25px #8c52ff55;cursor:pointer}
+button:active{transform:translateY(2px)}
+#touch{position:fixed;bottom:18px;left:18px;right:18px;display:none;justify-content:space-between;pointer-events:none}
+.touchGroup{display:flex;gap:10px}.touchBtn{width:58px;height:58px;border-radius:18px;background:#08172acc;border:1px solid #ffffff2b;display:grid;place-items:center;font-size:22px;pointer-events:auto;user-select:none}
+@media(max-width:800px){#touch{display:flex}.stats .pill:nth-child(2){display:none}.title{font-size:18px}}
+</style>
+</head>
+<body>
+<canvas id="game"></canvas>
+
+<div id="hud">
+  <div class="card"><div class="title">🌸 Sophie's Obby</div><div class="sub">Coded by Sophie • Adventure Edition</div></div>
+  <div class="stats">
+    <div class="card pill">⭐ <span id="stars">0</span></div>
+    <div class="card pill">🏁 <span id="stage">1</span>/12</div>
+    <div class="card pill">💀 <span id="falls">0</span></div>
+  </div>
+</div>
+
+<div id="message"></div>
+
+<div id="start">
+  <div class="panel">
+    <div class="logo"><span>SOPHIE'S</span><span class="pink">OBBY</span></div>
+    <p class="intro">A colourful 3D obstacle adventure made by Sophie.<br>Reach the glowing finish portal without falling!</p>
+    <button id="play">START OBBY ▶</button>
+    <p style="font-size:12px;opacity:.55;margin-top:18px">WASD / Arrow Keys • Space to jump • R to restart</p>
+  </div>
+</div>
+
+<div id="touch">
+ <div class="touchGroup">
+  <div class="touchBtn" data-key="ArrowLeft">◀</div><div class="touchBtn" data-key="ArrowRight">▶</div>
+ </div>
+ <div class="touchGroup">
+  <div class="touchBtn" data-key="ArrowUp">▲</div><div class="touchBtn" data-key="Space">●</div>
+ </div>
+</div>
+
+<script>
+const c=document.getElementById('game'),ctx=c.getContext('2d');
+let W,H,dpr,playing=false,last=0,keys={},stars=0,falls=0,stage=1,toastTimer;
+const player={x:0,y:0,z:0,vx:0,vy:0,vz:0,on:false,checkpoint:0};
+const platforms=[
+ {x:-4,y:0,z:4,w:8,d:7,h:.6,c:'#72e6ff'},
+ {x:5,y:1,z:7,w:5,d:4,h:.6,c:'#ff78d2'},
+ {x:11,y:2,z:10,w:4,d:4,h:.6,c:'#9d8cff'},
+ {x:16,y:2.7,z:6,w:5,d:4,h:.6,c:'#61e9b6'},
+ {x:21,y:3.4,z:3,w:4,d:5,h:.6,c:'#ffbf68'},
+ {x:26,y:4.1,z:7,w:5,d:4,h:.6,c:'#76b9ff'},
+ {x:32,y:5,z:11,w:4,d:4,h:.6,c:'#ff77b9'},
+ {x:37,y:6,z:7,w:5,d:4,h:.6,c:'#8e7cff'},
+ {x:43,y:6.7,z:3,w:4,d:5,h:.6,c:'#61e9b6'},
+ {x:49,y:7.5,z:7,w:5,d:4,h:.6,c:'#ffb866'},
+ {x:55,y:8.4,z:11,w:5,d:5,h:.6,c:'#66caff'},
+ {x:62,y:9.4,z:7,w:8,d:7,h:.8,c:'#ff72cb',finish:true}
+];
+// spinning hazard bars
+const hazards=[
+ {x:13,z:10,y:2.8,len:5,a:0},
+ {x:28.5,z:7,y:4.8,len:5,a:1},
+ {x:45,z:5,y:7.4,len:5,a:2}
+];
+const starsObj=[{x:6,z:7,y:2.2},{x:17,z:6,y:3.9},{x:27,z:7,y:5.3},{x:38,z:7,y:7.2},{x:50,z:7,y:8.8},{x:65,z:7,y:10.8}];
+
+function resize(){dpr=Math.min(devicePixelRatio||1,2);W=innerWidth;H=innerHeight;c.width=W*dpr;c.height=H*dpr;c.style.width=W+'px';c.style.height=H+'px';ctx.setTransform(dpr,0,0,dpr,0,0)}
+addEventListener('resize',resize);resize();
+
+function project(x,y,z){
+ const camX=player.x-7,camZ=player.z-2;
+ const dx=x-camX,dz=z-camZ;
+ const sx=W/2+dx*42-dz*18;
+ const sy=H*.56-dx*5-dz*22-y*42;
+ return [sx,sy];
+}
+function poly(points,fill,stroke){
+ ctx.beginPath();points.forEach((p,i)=>i?ctx.lineTo(p[0],p[1]):ctx.moveTo(p[0],p[1]));ctx.closePath();ctx.fillStyle=fill;ctx.fill();
+ if(stroke){ctx.strokeStyle=stroke;ctx.lineWidth=1;ctx.stroke()}
+}
+function cube(p){
+ const y=p.y,w=p.w,d=p.d,h=p.h;
+ const A=project(p.x-w/2,y,p.z-d/2),B=project(p.x+w/2,y,p.z-d/2),C=project(p.x+w/2,y,p.z+d/2),D=project(p.x-w/2,y,p.z+d/2);
+ const A2=project(p.x-w/2,y-h,p.z-d/2),B2=project(p.x+w/2,y-h,p.z-d/2),C2=project(p.x+w/2,y-h,p.z+d/2),D2=project(p.x-w/2,y-h,p.z+d/2);
+ poly([A,B,B2,A2],shade(p.c,-25));poly([B,C,C2,B2],shade(p.c,-45));poly([A,B,C,D],p.c,'#ffffff30');
+}
+function shade(hex,amt){let n=parseInt(hex.slice(1),16),r=Math.max(0,Math.min(255,(n>>16)+amt)),g=Math.max(0,Math.min(255,((n>>8)&255)+amt)),b=Math.max(0,Math.min(255,(n&255)+amt));return `rgb(${r},${g},${b})`}
+
+function drawSky(){
+ const g=ctx.createLinearGradient(0,0,0,H);g.addColorStop(0,'#4abfff');g.addColorStop(.55,'#b9edff');g.addColorStop(1,'#f2fbff');ctx.fillStyle=g;ctx.fillRect(0,0,W,H);
+ // clouds
+ ctx.globalAlpha=.32;
+ for(let i=0;i<8;i++){let x=(i*230-(player.x*12)%230),y=90+(i%3)*70;ctx.fillStyle='#fff';ctx.beginPath();ctx.arc(x,y,28,0,7);ctx.arc(x+30,y-10,38,0,7);ctx.arc(x+68,y,25,0,7);ctx.fill()}
+ ctx.globalAlpha=1;
+}
+function drawHazard(h){
+ const [sx,sy]=project(h.x,h.y,h.z),len=h.len*21;
+ ctx.save();ctx.translate(sx,sy);ctx.rotate(h.a);ctx.shadowBlur=18;ctx.shadowColor='#ff315f';ctx.fillStyle='#ff315f';ctx.fillRect(-len/2,-5,len,10);ctx.fillStyle='#fff';for(let i=-len/2;i<len/2;i+=28)ctx.fillRect(i,-5,10,10);ctx.restore();
+}
+function drawStar(s){
+ const [x,y]=project(s.x,s.y,s.z),r=9+Math.sin(performance.now()/180+s.x)*2;
+ ctx.save();ctx.translate(x,y);ctx.rotate(performance.now()/500);ctx.shadowBlur=18;ctx.shadowColor='#fff06a';ctx.fillStyle='#fff06a';ctx.beginPath();
+ for(let i=0;i<10;i++){let rr=i%2?r*.42:r;let a=-Math.PI/2+i*Math.PI/5;ctx.lineTo(Math.cos(a)*rr,Math.sin(a)*rr)}ctx.closePath();ctx.fill();ctx.restore();
+}
+function drawPlayer(){
+ const [x,y]=project(player.x,player.y+1.1,player.z);
+ ctx.save();ctx.translate(x,y);ctx.shadowBlur=20;ctx.shadowColor='#ff62c6';
+ // body
+ ctx.fillStyle='#ff68c9';ctx.fillRect(-11,-18,22,24);
+ ctx.fillStyle='#ffd5ee';ctx.beginPath();ctx.arc(0,-28,13,0,7);ctx.fill();
+ ctx.fillStyle='#3b294a';ctx.fillRect(-6,-31,4,4);ctx.fillRect(2,-31,4,4);
+ ctx.fillStyle='#fff';ctx.fillRect(-7,-23,14,3);
+ ctx.fillStyle='#7d55ff';ctx.fillRect(-12,6,9,15);ctx.fillRect(3,6,9,15);
+ ctx.restore();
+}
+function drawFinish(){
+ const p=platforms[platforms.length-1],x=project(p.x,p.y-.1,p.z)[0],y=project(p.x,p.y+3,p.z)[1];
+ ctx.save();ctx.translate(x,y);ctx.strokeStyle='#fff';ctx.lineWidth=7;ctx.shadowBlur=30;ctx.shadowColor='#ff55db';ctx.strokeRect(-35,-70,70,100);ctx.fillStyle='#ff55db22';ctx.fillRect(-30,-65,60,90);
+ ctx.fillStyle='#fff';ctx.font='900 16px Arial';ctx.textAlign='center';ctx.fillText('FINISH!',0,-82);ctx.restore();
+}
+function reset(){
+ const p=platforms[player.checkpoint];player.x=p.x;player.z=p.z;player.y=p.y+.3;player.vx=player.vy=player.vz=0;
+}
+function die(){falls++;document.getElementById('falls').textContent=falls;toast('Oops! Back to the checkpoint 💫');reset()}
+function toast(t){const m=document.getElementById('message');m.textContent=t;m.classList.add('show');clearTimeout(toastTimer);toastTimer=setTimeout(()=>m.classList.remove('show'),1700)}
+function collide(){
+ player.on=false;
+ for(let i=0;i<platforms.length;i++){
+  const p=platforms[i],top=p.y;
+  if(player.x>p.x-p.w/2-.25&&player.x<p.x+p.w/2+.25&&player.z>p.z-p.d/2-.25&&player.z<p.z+p.d/2+.25&&player.y<=top+.5&&player.y>=top-.8&&player.vy<=0){
+   player.y=top+.3;player.vy=0;player.on=true;
+   if(i>player.checkpoint){player.checkpoint=i;stage=Math.min(12,i+1);document.getElementById('stage').textContent=stage;toast('Checkpoint reached! ✨')}
+  }
+ }
+}
+function update(dt){
+ const speed=7;
+ let ax=(keys.ArrowRight||keys.d?1:0)-(keys.ArrowLeft||keys.a?1:0);
+ let az=(keys.ArrowDown||keys.s?1:0)-(keys.ArrowUp||keys.w?1:0);
+ player.vx+=(ax*speed-player.vx)*Math.min(1,dt*10);
+ player.vz+=(az*speed-player.vz)*Math.min(1,dt*10);
+ player.x+=player.vx*dt;player.z+=player.vz*dt;player.vy-=18*dt;player.y+=player.vy*dt;
+ if((keys.Space||keys[' '])&&player.on){player.vy=8;player.on=false;keys.Space=false}
+ collide();
+ hazards.forEach(h=>{h.a+=dt*2.8;let dx=player.x-h.x,dz=player.z-h.z;if(Math.hypot(dx,dz)<2.1&&Math.abs(player.y-h.y)<1.4)die()});
+ starsObj.forEach(s=>{if(!s.got&&Math.hypot(player.x-s.x,player.z-s.z)<1.3&&Math.abs(player.y-s.y)<2){s.got=true;stars++;document.getElementById('stars').textContent=stars;toast('Star collected! ⭐')}});
+ if(player.y<-5)die();
+ const finish=platforms[platforms.length-1];if(player.x>finish.x-3&&player.x<finish.x+3&&player.z>finish.z-3&&player.z<finish.z+3){playing=false;toast('🎉 SOPHIE DID IT! 🎉');setTimeout(()=>document.getElementById('start').style.display='grid',1000)}
+}
+function render(){
+ drawSky();
+ // distant ground
+ ctx.fillStyle='#8bd48f';ctx.globalAlpha=.25;ctx.fillRect(0,H*.68,W,H*.32);ctx.globalAlpha=1;
+ [...platforms].sort((a,b)=>a.z-b.z).forEach(cube);
+ hazards.forEach(drawHazard);
+ starsObj.filter(s=>!s.got).forEach(drawStar);
+ drawFinish();drawPlayer();
+}
+function loop(t){const dt=Math.min(.033,(t-last)/1000||.016);last=t;if(playing)update(dt);render();requestAnimationFrame(loop)}
+addEventListener('keydown',e=>{keys[e.key]=true;keys[e.code]=true;if(e.key.toLowerCase()==='r'){reset();toast('Restarted! 🔄')}});
+addEventListener('keyup',e=>{keys[e.key]=false;keys[e.code]=false});
+document.querySelectorAll('.touchBtn').forEach(b=>{const k=b.dataset.key;b.addEventListener('pointerdown',e=>{e.preventDefault();keys[k]=true});['pointerup','pointercancel','pointerleave'].forEach(ev=>b.addEventListener(ev,()=>keys[k]=false))});
+document.getElementById('play').onclick=()=>{document.getElementById('start').style.display='none';playing=true;reset()};
+reset();requestAnimationFrame(loop);
+</script>
+</body>
+</html>
